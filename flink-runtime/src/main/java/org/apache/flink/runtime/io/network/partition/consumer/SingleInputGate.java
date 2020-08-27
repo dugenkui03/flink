@@ -110,10 +110,12 @@ public class SingleInputGate extends IndexedInputGate {
 
 	private static final Logger LOG = LoggerFactory.getLogger(SingleInputGate.class);
 
-	/** Lock object to guard partition requests and runtime channel updates. */
+	// Lock object to guard(保卫/守卫) partition(n.v: 分割) requests and runtime channel updates.
+	// 守护partition请求和 runtime channel update 的锁对象
 	private final Object requestLock = new Object();
 
-	/** The name of the owning task, for logging purposes. */
+	// The name of the owning task, for logging purposes.
+	// 拥有的任务的名称，用于记录日志
 	private final String owningTaskName;
 
 	private final int gateIndex;
@@ -146,7 +148,8 @@ public class SingleInputGate extends IndexedInputGate {
 	@GuardedBy("requestLock")
 	private final InputChannel[] channels;
 
-	/** Channels, which notified this input gate about available data. */
+	// Channels, which notified this input gate about available data.
+	// 通道，
 	private final ArrayDeque<InputChannel> inputChannelsWithData = new ArrayDeque<>();
 
 	/**
