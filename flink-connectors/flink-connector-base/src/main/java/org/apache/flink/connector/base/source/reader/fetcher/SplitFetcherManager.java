@@ -101,12 +101,13 @@ public abstract class SplitFetcherManager<E, SplitT extends SourceSplit> {
 			@Override
 			public void accept(Throwable t) {
 				LOG.error("Received uncaught exception.", t);
-				// 如果将 "未捕获的异常"从null设置为抛出的异常失败：如果之前uncaughtFetcherException引用已经设置为某个异常了
+				// 如果将 "未捕获的异常"从null设置为抛出的异常失败
+				// 如果之前uncaughtFetcherException引用已经设置为某个异常了
 				if (!uncaughtFetcherException.compareAndSet(null, t)) {
 
 					// Add the exception to the exception list.
 					// 将异常添加到异常列表uncaughtFetcherException引用异常的异常链表
-					// addSuppressed：
+					// addSuppressed：synchronized方法
 					// 				当一个异常被抛出的时候，可能有其他异常因为该异常而被抑制住，从而无法正常抛出
 					// 				这时可以通过addSuppressed方法把这些被抑制的方法记录下来。被抑制的异常会出现在抛出的异常的堆栈信息中，
 					// 				也可以通过getSuppressed方法来获取这些异常。这样做的好处是不会丢失任何异常，方便开发人员进行调试
@@ -120,6 +121,7 @@ public abstract class SplitFetcherManager<E, SplitT extends SourceSplit> {
 			}
 		};
 		this.splitReaderFactory = splitReaderFactory;
+		//初始化为null
 		this.uncaughtFetcherException = new AtomicReference<>(null);
 		this.fetcherIdGenerator = new AtomicInteger(0);
 		this.fetchers = new ConcurrentHashMap<>();
@@ -193,6 +195,7 @@ public abstract class SplitFetcherManager<E, SplitT extends SourceSplit> {
 		}
 	}
 
+	// 检查当前是否有异常
 	public void checkErrors() {
 		if (uncaughtFetcherException.get() != null) {
 			throw new RuntimeException("One or more fetchers have encountered exception",
