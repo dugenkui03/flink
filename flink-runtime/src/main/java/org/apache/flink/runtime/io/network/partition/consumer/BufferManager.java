@@ -44,25 +44,31 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /**
- * The general buffer manager used by {@link InputChannel} to request/recycle
- * exclusive or floating buffers.
+ * 在InputChannel使用的通用缓冲管理器，用来 "请求/循环利用 或者浮动缓存" / to request/recycle(循环利用) exclusive or floating buffers
+ *
+ * The general buffer manager used by {@link InputChannel} to request/recycle(循环利用) exclusive or floating buffers.
  */
 public class BufferManager implements BufferListener, BufferRecycler {
 
-	/** The available buffer queue wraps both exclusive and requested floating buffers. */
+	// The available buffer queue wraps both exclusive and requested floating buffers.
+	// 可用的缓冲队列、包装 独有的和浮动的缓冲
 	private final AvailableBufferQueue bufferQueue = new AvailableBufferQueue();
 
-	/** The buffer provider for requesting exclusive buffers. */
+	// The buffer provider for requesting exclusive buffers.
+	// 对请求独有的换从区的 缓冲提供者
 	private final MemorySegmentProvider globalPool;
 
-	/** The input channel to own this buffer manager. */
+	// The input channel to own this buffer manager.
+	// 拥有此缓冲区管理权的输入通道。
 	private final InputChannel inputChannel;
 
 	/** The tag indicates whether it is waiting for additional floating buffers from the buffer pool. */
+	// 该标记说明 是否在等待来自缓冲池的额外的浮动缓冲区
 	@GuardedBy("bufferQueue")
 	private boolean isWaitingForFloatingBuffers;
 
 	/** The total number of required buffers for the respective input channel. */
+	// 各个输入通道所需缓冲区的总量
 	@GuardedBy("bufferQueue")
 	private int numRequiredBuffers;
 
@@ -83,26 +89,41 @@ public class BufferManager implements BufferListener, BufferRecycler {
 
 	@Nullable
 	Buffer requestBuffer() {
+		// 使用被操作的集合加锁
 		synchronized (bufferQueue) {
 			return bufferQueue.takeBuffer();
 		}
 	}
 
+	// fixme 阻塞的获取缓冲
 	Buffer requestBufferBlocking() throws IOException, InterruptedException {
+		// 使用被操作的集合加锁
 		synchronized (bufferQueue) {
 			Buffer buffer;
+
+			//当获取到的缓冲为空时，继续轮询
 			while ((buffer = bufferQueue.takeBuffer()) == null) {
+
+				// step_1: 如果 输入通道已经释放，则抛异常：BufferManager就是给输入通道用的
 				if (inputChannel.isReleased()) {
 					throw new CancelTaskException("Input channel [" + inputChannel.channelInfo + "] has already been released.");
 				}
+
+				// stap_2: 如果没有 "等待浮动缓冲区"
 				if (!isWaitingForFloatingBuffers) {
+					// 获取输入通道的 inputGate 的 动态大小缓冲池
 					BufferPool bufferPool = inputChannel.inputGate.getBufferPool();
+
+					// 赋值结果对象
 					buffer = bufferPool.requestBuffer();
+
+					// 如果结果对象为null && 判定应该继续请求，则不进行wait、继续轮询
 					if (buffer == null && shouldContinueRequest(bufferPool)) {
 						continue;
 					}
 				}
 
+				// 如果在step_2已经赋值、则直接返回，否则wait()
 				if (buffer != null) {
 					return buffer;
 				}
@@ -214,6 +235,8 @@ public class BufferManager implements BufferListener, BufferRecycler {
 
 	/**
 	 * Recycles all the exclusive and floating buffers from the given buffer queue.
+	 *
+	 * 从给定的缓冲队列回收所有独占的和浮动的缓冲。
 	 */
 	void releaseAllBuffers(ArrayDeque<Buffer> buffers) throws IOException {
 		// Gather all exclusive buffers and recycle them to global pool in batch, because
@@ -228,6 +251,8 @@ public class BufferManager implements BufferListener, BufferRecycler {
 				buffer.recycleBuffer();
 			}
 		}
+
+		// fixme 唤醒所有在该队列上等待取数的线程
 		synchronized (bufferQueue) {
 			bufferQueue.releaseAll(exclusiveRecyclingSegments);
 			bufferQueue.notifyAll();

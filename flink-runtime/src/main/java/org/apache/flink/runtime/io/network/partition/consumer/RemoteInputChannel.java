@@ -68,9 +68,10 @@ public class RemoteInputChannel extends InputChannel {
 	 */
 	private final ArrayDeque<Buffer> receivedBuffers = new ArrayDeque<>();
 
-	/**
-	 * Flag indicating whether this channel has been released. Either called by the receiving task
-	 * thread or the task manager actor.
+	/**标识该通道是否被释放，被释放即关闭、比可用。被接受任务线程或者任务管理者调用。
+	 *
+	 * Flag indicating whether this channel has been released.
+	 * Either called by the receiving task thread or the task manager actor.
 	 */
 	private final AtomicBoolean isReleased = new AtomicBoolean();
 
