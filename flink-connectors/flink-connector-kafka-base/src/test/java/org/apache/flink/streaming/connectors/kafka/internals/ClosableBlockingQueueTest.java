@@ -48,7 +48,7 @@ public class ClosableBlockingQueueTest {
 	public void testCreateQueueHashCodeEquals() {
 		try {
 			ClosableBlockingQueue<String> queue1 = new ClosableBlockingQueue<>();
-			ClosableBlockingQueue<String> queue2 = new ClosableBlockingQueue<>(22);
+			ClosableBlockingQueue<String> queue2 = new ClosableBlockingQueue<>();
 
 			assertTrue(queue1.isOpen());
 			assertTrue(queue2.isOpen());
