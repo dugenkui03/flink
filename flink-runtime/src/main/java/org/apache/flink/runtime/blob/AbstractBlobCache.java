@@ -41,53 +41,50 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
- * Abstract base class for permanent and transient BLOB files.
+ * Abstract base class for permanent(永久的) and transient BLOB files.
+ *
+ * 永久大对象文件的抽象基础类。BLOB：二进制大对象（binary large object）
  */
 public abstract class AbstractBlobCache implements Closeable {
 
-	/**
-	 * The log object used for debugging.
-	 */
+	// The log object used for debugging.
+	// 用来debug的日志对象
 	protected final Logger log;
 
-	/**
-	 * Counter to generate unique names for temporary files.
-	 */
+	// Counter to generate unique names for temporary files.
+	// 用来为临时文件生成唯一名称的counter
 	protected final AtomicLong tempFileCounter = new AtomicLong(0);
 
-	/**
-	 * Root directory for local file storage.
-	 */
+	// Root directory for local file storage.
+	// 存储本地文件的根目录
 	protected final File storageDir;
 
-	/**
-	 * Blob store for distributed file storage, e.g. in HA.
-	 */
+	// Blob store for distributed file storage, e.g. in HA.
+	// 分布式文件存储的二进制存储。
 	protected final BlobView blobView;
 
 	protected final AtomicBoolean shutdownRequested = new AtomicBoolean();
 
-	/**
-	 * Shutdown hook thread to ensure deletion of the local storage directory.
-	 */
+	// Shutdown hook thread to ensure deletion of the local storage directory.
+	// shutdown的钩子线程：保证对本地存储目录的删除。
 	protected final Thread shutdownHook;
 
-	/**
-	 * The number of retries when the transfer fails.
-	 */
+	// The number of retries when the transfer fails.
+	// 当前传输文件失败时、重试的次数
 	protected final int numFetchRetries;
 
-	/**
-	 * Configuration for the blob client like ssl parameters required to connect to the blob
-	 * server.
-	 */
+	// Configuration for the blob client like ssl parameters required to connect to the blob server.
+	// 二进制客户端的配置，像 ssl、要连接到blob的server端。
 	protected final Configuration blobClientConfig;
 
-	/**
-	 * Lock guarding concurrent file accesses.
-	 */
+	// Lock guarding concurrent file accesses.
+	// 保证访问当前文件的锁
 	protected final ReadWriteLock readWriteLock;
 
+	/**
+	 * 服务地址。
+	 * fixme 引用修改是立即对其他线程可见的、但是引用指向对象的修改不是。
+	 */
 	@Nullable
 	protected volatile InetSocketAddress serverAddress;
 
@@ -122,6 +119,7 @@ public abstract class AbstractBlobCache implements Closeable {
 		this.serverAddress = serverAddress;
 	}
 
+	// 获取存储目录
 	public File getStorageDir() {
 		return storageDir;
 	}
@@ -147,8 +145,9 @@ public abstract class AbstractBlobCache implements Closeable {
 		checkArgument(blobKey != null, "BLOB key cannot be null.");
 
 		final File localFile = BlobUtils.getStorageLocation(storageDir, jobId, blobKey);
-		readWriteLock.readLock().lock();
 
+		// 获取读锁、如果localFile存在、则返回该File
+		readWriteLock.readLock().lock();
 		try {
 			if (localFile.exists()) {
 				return localFile;
@@ -164,10 +163,10 @@ public abstract class AbstractBlobCache implements Closeable {
 			try {
 				if (blobView.get(jobId, blobKey, incomingFile)) {
 					// now move the temp file to our local cache atomically
+					// 将临时文件移动至本地缓存。
 					readWriteLock.writeLock().lock();
 					try {
-						BlobUtils.moveTempFileToStore(
-							incomingFile, jobId, blobKey, localFile, log, null);
+						BlobUtils.moveTempFileToStore(incomingFile, jobId, blobKey, localFile, log, null);
 					} finally {
 						readWriteLock.writeLock().unlock();
 					}
@@ -208,10 +207,15 @@ public abstract class AbstractBlobCache implements Closeable {
 
 	/**
 	 * Returns the port the BLOB server is listening on.
+	 * 获取二进制服务监听的端口号码
 	 *
 	 * @return BLOB server port or {@code -1} if no server address
 	 */
 	public int getPort() {
+		/**
+		 * fixme
+		 * 		之所以用一个新引用指向地址对象，是担心正在通过该引用读取对象的时候，其他线程将引用指向了null、导致npe
+		 */
 		final InetSocketAddress currentServerAddress = serverAddress;
 
 		if (currentServerAddress != null) {
