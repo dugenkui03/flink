@@ -69,24 +69,30 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 @Internal
 public class KafkaConsumerThread<T> extends Thread {
 
-	/** Logger for this consumer. */
+	// Logger for this consumer： 这个消费这的日志
 	private final Logger log;
 
-	/** The handover of data and exceptions between the consumer thread and the task thread. */
+	// The handover(移交) of data and exceptions between the consumer thread and the task thread.
+	// 消费者和任务线程之间的数据移交和异常
 	private final Handover handover;
 
-	/** The next offsets that the main thread should commit and the commit callback. */
+	// The next offsets that the main thread should commit and the commit callback.
+	// ？主线程应该提交的下一个偏移量，以及提交的"回调函数"？
 	private final AtomicReference<Tuple2<Map<TopicPartition, OffsetAndMetadata>, KafkaCommitCallback>> nextOffsetsToCommit;
 
+	// Kafka 消费者配置
 	/** The configuration for the Kafka consumer. */
 	private final Properties kafkaProperties;
 
 	/** The queue of unassigned partitions that we need to assign to the Kafka consumer. */
+	// 未分配的分区队列：应该指定kafka消费者
 	private final ClosableBlockingQueue<KafkaTopicPartitionState<T, TopicPartition>> unassignedPartitionsQueue;
 
+	//获取操作的超时时间，单位毫秒。
 	/** The maximum number of milliseconds to wait for a fetch batch. */
 	private final long pollTimeout;
 
+	// 是否将kafka指标加入到flink指标中
 	/** Flag whether to add Kafka's metrics to the Flink metrics. */
 	private final boolean useMetrics;
 
@@ -97,31 +103,40 @@ public class KafkaConsumerThread<T> extends Thread {
 	@Deprecated
 	private final MetricGroup subtaskMetricGroup;
 
-	/** We get this from the outside to publish metrics. */
+	// We get this from the outside to publish metrics.
+	// "从外部获取此信息以发布指标"： 指标组
 	private final MetricGroup consumerMetricGroup;
 
-	/** Reference to the Kafka consumer, once it is created. */
+	// Reference to the Kafka consumer, once it is created.
+	// 指向创建好的kafka消费者
 	private volatile Consumer<byte[], byte[]> consumer;
 
-	/** This lock is used to isolate the consumer for partition reassignment. */
+	// This lock is used to isolate the consumer for partition re-assignment.
+	// 用来隔离 "分区重赋值" 的消费者
 	private final Object consumerReassignmentLock;
 
-	/** Indication if this consumer has any assigned partition. */
+	// Indication if this consumer has any assigned(指定的) partition.
+	// 标识消费者是否有指定的分区
 	private boolean hasAssignedPartitions;
 
 	/**
 	 * Flag to indicate whether an external operation ({@link #setOffsetsToCommit(Map, KafkaCommitCallback)}
-	 * or {@link #shutdown()}) had attempted to wakeup the consumer while it was isolated for partition reassignment.
+	 * or {@link #shutdown()}) had attempted to wakeup the consumer while it was isolated for partition re-assignment.
 	 */
+	// Flag to indicate whether an external operation (setOffsetsToCommit(Map, KafkaCommitCallback) or shutdown())
+	// had attempted to wakeup the consumer while it was isolated for partition re-assignment.
+	// 标识：当外部操作被"分区重赋值"隔离的时候、是否试图唤醒消费者
 	private volatile boolean hasBufferedWakeup;
 
-	/** Flag to mark the main work loop as alive. */
+	// Flag to mark the main work loop as alive.
+	// 标记主工作流程是否在运行
 	private volatile boolean running;
 
-	/** Flag tracking whether the latest commit request has completed. */
+	// Flag tracking whether the latest commit request has completed.
+	// 标记最后提交的请求是否完成了
 	private volatile boolean commitInProgress;
 
-	/** Ratelimiter. */
+	// rate-limiter：限速器
 	private FlinkConnectorRateLimiter rateLimiter;
 
 	public KafkaConsumerThread(
@@ -176,8 +191,7 @@ public class KafkaConsumerThread<T> extends Thread {
 		// including concurrent 'close()' calls.
 		try {
 			this.consumer = getConsumer(kafkaProperties);
-		}
-		catch (Throwable t) {
+		} catch (Throwable t) {
 			handover.reportError(t);
 			return;
 		}
@@ -196,7 +210,8 @@ public class KafkaConsumerThread<T> extends Thread {
 					for (Map.Entry<MetricName, ? extends Metric> metric: metrics.entrySet()) {
 						consumerMetricGroup.gauge(metric.getKey().name(), new KafkaMetricWrapper(metric.getValue()));
 
-						// TODO this metric is kept for compatibility purposes; should remove in the future
+						// TODO this metric is kept for compatibility(兼容) purposes; should remove in the future
+						// 兼容目的保留的，在未来应该移除
 						subtaskMetricGroup.gauge(metric.getKey().name(), new KafkaMetricWrapper(metric.getValue()));
 					}
 				}
@@ -303,13 +318,17 @@ public class KafkaConsumerThread<T> extends Thread {
 		}
 	}
 
-	/**
-	 * Shuts this thread down, waking up the thread gracefully if blocked (without Thread.interrupt() calls).
-	 */
+	// Shuts this thread down, waking up the thread gracefully(优雅的) if blocked (without Thread.interrupt() calls).
+	//
+	// KafkaConsumerThread表示一个Kafka 消费者线程
+	// shutdown()将关闭该线程，如果该线程阻塞、则优雅的唤醒该线程、而非使用Thread.interrupt()
 	public void shutdown() {
+		// 关闭主工作流程：run方法中：while(running)
 		running = false;
 
 		// wake up all blocking calls on the queue
+		// 唤醒所有的在该队列获取数据不到而阻塞的线程：
+		// fixme：因为在await()的while判断条件中有判断了队列是否被关闭、所以这是一种优雅、非中断的方法
 		unassignedPartitionsQueue.close();
 
 		// We cannot call close() on the KafkaConsumer, because it will actually throw
@@ -493,6 +512,7 @@ public class KafkaConsumerThread<T> extends Thread {
 		}
 	}
 
+	// 使用指定的属性创建kafka消费者
 	@VisibleForTesting
 	Consumer<byte[], byte[]> getConsumer(Properties kafkaProperties) {
 		return new KafkaConsumer<>(kafkaProperties);
