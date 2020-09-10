@@ -48,10 +48,13 @@ import static org.apache.flink.table.descriptors.KafkaValidator.CONNECTOR_TYPE_V
  */
 @PublicEvolving
 public class Kafka extends ConnectorDescriptor {
-
+	// 版本
 	private String version;
+	// 主题topic
 	private String topic;
+	//kafka消费这的"开始模块？"
 	private StartupMode startupMode;
+	// "特殊？"的偏移量
 	private Map<Integer, Long> specificOffsets;
 	private long startTimestampMillis;
 	private Map<String, String> kafkaProperties;

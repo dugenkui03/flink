@@ -126,8 +126,8 @@ public abstract class SplitFetcherManager<E, SplitT extends SourceSplit> {
 		this.fetcherIdGenerator = new AtomicInteger(0);
 		this.fetchers = new ConcurrentHashMap<>();
 
-		// Create the executor with a thread factory that fails the source reader if one of
-		// the fetcher thread exits abnormally.
+		// Create the executor with a thread factory that fails the source reader if one of the fetcher thread exits abnormally.
+		// fixme 线程工厂的创建真简练，赞：入参是个Runnable、返回值是Thread
 		this.executors = Executors.newCachedThreadPool(r -> new Thread(r, "SourceFetcher"));
 		this.closed = false;
 	}
