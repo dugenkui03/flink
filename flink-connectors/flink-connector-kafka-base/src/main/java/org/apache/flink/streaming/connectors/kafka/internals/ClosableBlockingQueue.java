@@ -20,15 +20,13 @@ package org.apache.flink.streaming.connectors.kafka.internals;
 
 import org.apache.flink.annotation.Internal;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.Objects.requireNonNull;
 
@@ -50,42 +48,14 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class ClosableBlockingQueue<E> {
 
-	/** The lock used to make queue accesses and open checks atomic. */
-	private final ReentrantLock lock;
-
-	/** The condition on which blocking get-calls wait if the queue is empty. */
-	private final Condition nonEmpty;
+	/** Flag marking the status of the queue. */
+	private volatile boolean open = true;
 
 	/** The deque of elements. */
-	private final ArrayDeque<E> elements;
+	private final LinkedBlockingQueue<E> elements = new LinkedBlockingQueue<>();
 
-	/** Flag marking the status of the queue. */
-	private volatile boolean open;
 
-	// ------------------------------------------------------------------------
-
-	/**
-	 * Creates a new empty queue.
-	 */
-	public ClosableBlockingQueue() {
-		this(10);
-	}
-
-	/**
-	 * Creates a new empty queue, reserving space for at least the specified number
-	 * of elements. The queue can still grow, of more elements are added than the
-	 * reserved space.
-	 *
-	 * @param initialSize The number of elements to reserve space for.
-	 */
-	public ClosableBlockingQueue(int initialSize) {
-		this.lock = new ReentrantLock(true);
-		this.nonEmpty = this.lock.newCondition();
-
-		this.elements = new ArrayDeque<>(initialSize);
-		this.open = true;
-
-	}
+	public ClosableBlockingQueue() { }
 
 	/**
 	 * Creates a new queue that contains the given elements.
@@ -93,7 +63,6 @@ public class ClosableBlockingQueue<E> {
 	 * @param initialElements The elements to initially add to the queue.
 	 */
 	public ClosableBlockingQueue(Collection<? extends E> initialElements) {
-		this(initialElements.size());
 		this.elements.addAll(initialElements);
 	}
 
@@ -106,12 +75,7 @@ public class ClosableBlockingQueue<E> {
 	 * @return The number of elements currently in the queue.
 	 */
 	public int size() {
-		lock.lock();
-		try {
-			return elements.size();
-		} finally {
-			lock.unlock();
-		}
+		return elements.size();
 	}
 
 	/**
@@ -119,7 +83,7 @@ public class ClosableBlockingQueue<E> {
 	 * @return True, if the queue is empty; false, if it is non-empty.
 	 */
 	public boolean isEmpty() {
-		return size() == 0;
+		return elements.isEmpty();
 	}
 
 	/**
@@ -138,23 +102,17 @@ public class ClosableBlockingQueue<E> {
 	 * @return True, if the queue is closed, false if the queue remains open.
 	 */
 	public boolean close() {
-		lock.lock();
-		try {
-			if (open) {
-				if (elements.isEmpty()) {
-					open = false;
-					nonEmpty.signalAll();
-					return true;
-				} else {
-					return false;
-				}
-			}
-			else {
-				// already closed
+		if (open) {
+			if (elements.isEmpty()) {
+				// 不允许在读写
+				open = false;
 				return true;
+			} else {
+				return false;
 			}
-		} finally {
-			lock.unlock();
+		} else {
+			// already closed
+			return true;
 		}
 	}
 
@@ -176,18 +134,11 @@ public class ClosableBlockingQueue<E> {
 	public boolean addIfOpen(E element) {
 		requireNonNull(element);
 
-		lock.lock();
-		try {
-			if (open) {
-				elements.addLast(element);
-				if (elements.size() == 1) {
-					nonEmpty.signalAll();
-				}
-			}
-			return open;
-		} finally {
-			lock.unlock();
+		final boolean open = this.open;
+		if (open) {
+			elements.add(element);
 		}
+		return open;
 	}
 
 	/**
@@ -200,18 +151,10 @@ public class ClosableBlockingQueue<E> {
 	public void add(E element) throws IllegalStateException {
 		requireNonNull(element);
 
-		lock.lock();
-		try {
-			if (open) {
-				elements.addLast(element);
-				if (elements.size() == 1) {
-					nonEmpty.signalAll();
-				}
-			} else {
-				throw new IllegalStateException("queue is closed");
-			}
-		} finally {
-			lock.unlock();
+		if (open) {
+			elements.add(element);
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
@@ -228,19 +171,10 @@ public class ClosableBlockingQueue<E> {
 	 * @throws IllegalStateException Thrown, if the queue is closed.
 	 */
 	public E peek() {
-		lock.lock();
-		try {
-			if (open) {
-				if (elements.size() > 0) {
-					return elements.getFirst();
-				} else {
-					return null;
-				}
-			} else {
-				throw new IllegalStateException("queue is closed");
-			}
-		} finally {
-			lock.unlock();
+		if (open) {
+			return elements.peek();
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
@@ -257,19 +191,10 @@ public class ClosableBlockingQueue<E> {
 	 * @throws IllegalStateException Thrown, if the queue is closed.
 	 */
 	public E poll() {
-		lock.lock();
-		try {
-			if (open) {
-				if (elements.size() > 0) {
-					return elements.removeFirst();
-				} else {
-					return null;
-				}
-			} else {
-				throw new IllegalStateException("queue is closed");
-			}
-		} finally {
-			lock.unlock();
+		if (open) {
+			return elements.poll();
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
@@ -286,21 +211,19 @@ public class ClosableBlockingQueue<E> {
 	 * @throws IllegalStateException Thrown, if the queue is closed.
 	 */
 	public List<E> pollBatch() {
-		lock.lock();
-		try {
-			if (open) {
-				if (elements.size() > 0) {
-					ArrayList<E> result = new ArrayList<>(elements);
-					elements.clear();
-					return result;
-				} else {
-					return null;
-				}
-			} else {
-				throw new IllegalStateException("queue is closed");
+		if (open) {
+			List<E> result = new LinkedList();
+			E element;
+			while ((element = elements.poll()) != null) {
+				result.add(element);
 			}
-		} finally {
-			lock.unlock();
+
+			if (result.size() == 0) {
+				return null;
+			}
+			return result;
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
@@ -318,19 +241,10 @@ public class ClosableBlockingQueue<E> {
 	 *                              element to be added.
 	 */
 	public E getElementBlocking() throws InterruptedException {
-		lock.lock();
-		try {
-			while (open && elements.isEmpty()) {
-				nonEmpty.await();
-			}
-
-			if (open) {
-				return elements.removeFirst();
-			} else {
-				throw new IllegalStateException("queue is closed");
-			}
-		} finally {
-			lock.unlock();
+		if (open) {
+			return elements.take();
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
@@ -357,25 +271,10 @@ public class ClosableBlockingQueue<E> {
 			throw new IllegalArgumentException("invalid timeout");
 		}
 
-		final long deadline = System.nanoTime() + timeoutMillis * 1_000_000L;
-
-		lock.lock();
-		try {
-			while (open && elements.isEmpty() && timeoutMillis > 0) {
-				nonEmpty.await(timeoutMillis, TimeUnit.MILLISECONDS);
-				timeoutMillis = (deadline - System.nanoTime()) / 1_000_000L;
-			}
-
-			if (!open) {
-				throw new IllegalStateException("queue is closed");
-			}
-			else if (elements.isEmpty()) {
-				return null;
-			} else {
-				return elements.removeFirst();
-			}
-		} finally {
-			lock.unlock();
+		if (open) {
+			return elements.poll(timeoutMillis, TimeUnit.MILLISECONDS);
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
@@ -396,20 +295,17 @@ public class ClosableBlockingQueue<E> {
 	 *                              element to be added.
 	 */
 	public List<E> getBatchBlocking() throws InterruptedException {
-		lock.lock();
-		try {
-			while (open && elements.isEmpty()) {
-				nonEmpty.await();
+		if (open) {
+			List<E> result = new LinkedList();
+			E element;
+			while ((element = elements.poll()) != null || result.size() == 0) {
+				if (element != null) {
+					result.add(element);
+				}
 			}
-			if (open) {
-				ArrayList<E> result = new ArrayList<>(elements);
-				elements.clear();
-				return result;
-			} else {
-				throw new IllegalStateException("queue is closed");
-			}
-		} finally {
-			lock.unlock();
+			return result;
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
@@ -441,26 +337,22 @@ public class ClosableBlockingQueue<E> {
 
 		final long deadline = System.nanoTime() + timeoutMillis * 1_000_000L;
 
-		lock.lock();
-		try {
-			while (open && elements.isEmpty() && timeoutMillis > 0) {
-				nonEmpty.await(timeoutMillis, TimeUnit.MILLISECONDS);
+		if (open) {
+			List<E> result = new LinkedList();
+			E element;
+			while ((element = elements.poll()) != null || result.isEmpty()) {
+				if (timeoutMillis <= 0 && result.isEmpty()) {
+					return Collections.emptyList();
+				}
 				timeoutMillis = (deadline - System.nanoTime()) / 1_000_000L;
-			}
 
-			if (!open) {
-				throw new IllegalStateException("queue is closed");
+				if (element != null) {
+					result.add(element);
+				}
 			}
-			else if (elements.isEmpty()) {
-				return Collections.emptyList();
-			}
-			else {
-				ArrayList<E> result = new ArrayList<>(elements);
-				elements.clear();
-				return result;
-			}
-		} finally {
-			lock.unlock();
+			return result;
+		} else {
+			throw new IllegalStateException("queue is closed");
 		}
 	}
 
