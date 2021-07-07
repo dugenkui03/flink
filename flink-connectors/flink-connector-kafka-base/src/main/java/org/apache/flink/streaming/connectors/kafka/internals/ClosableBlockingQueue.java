@@ -50,16 +50,20 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class ClosableBlockingQueue<E> {
 
-	/** The lock used to make queue accesses and open checks atomic. */
+	// The lock used to make queue accesses and open checks atomic.
+	// 保证锁操作原子性的锁
 	private final ReentrantLock lock;
 
-	/** The condition on which blocking get-calls wait if the queue is empty. */
+	// The condition on which blocking get-calls wait if the queue is empty.
+	// 当队列中元素为空的时候，所有线程在此条件队列等待；
 	private final Condition nonEmpty;
 
-	/** The deque of elements. */
+	//  The deque of elements.
+	// 保存元素的双端队列
 	private final ArrayDeque<E> elements;
 
-	/** Flag marking the status of the queue. */
+	// Flag marking the status of the queue
+	// 当前队列是否开启. volatile保证多线程的可见性
 	private volatile boolean open;
 
 	// ------------------------------------------------------------------------
@@ -115,6 +119,7 @@ public class ClosableBlockingQueue<E> {
 	}
 
 	/**
+	 * 检查队列是否为空。
 	 * Checks whether the queue is empty (has no elements).
 	 * @return True, if the queue is empty; false, if it is non-empty.
 	 */

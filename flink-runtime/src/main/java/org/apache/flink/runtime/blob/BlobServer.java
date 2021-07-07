@@ -98,7 +98,8 @@ public class BlobServer extends Thread implements BlobService, BlobWriter, Perma
 	/** The maximum number of concurrent connections. */
 	private final int maxConnections;
 
-	/** Lock guarding concurrent file accesses. */
+	// Lock guarding concurrent file accesses.
+	// 控制当前文件访问的锁
 	private final ReadWriteLock readWriteLock;
 
 	/**
@@ -502,8 +503,7 @@ public class BlobServer extends Thread implements BlobService, BlobWriter, Perma
 
 				readWriteLock.writeLock().lock();
 				try {
-					BlobUtils.moveTempFileToStore(
-						incomingFile, jobId, blobKey, localFile, LOG, null);
+					BlobUtils.moveTempFileToStore(incomingFile, jobId, blobKey, localFile, LOG, null);
 				} finally {
 					readWriteLock.writeLock().unlock();
 				}

@@ -36,6 +36,7 @@ public class ThrowableCatchingRunnable implements Runnable {
 		this.runnable = runnable;
 	}
 
+	// 真正业务逻辑执行的地方
 	@Override
 	public void run() {
 		try {

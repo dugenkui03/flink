@@ -18,6 +18,10 @@
 
 package org.apache.flink.runtime.util.event;
 
+/**
+ * 时间监听器
+ * @param <T>
+ */
 public interface EventListener<T> {
 
 	void onEvent(T event);

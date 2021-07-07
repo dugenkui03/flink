@@ -112,6 +112,7 @@ public class EnvironmentInformation {
 		return new RevisionInformation(getGitCommitIdAbbrev(), getGitCommitTimeString());
 	}
 
+	// 一个用占位类模式初始化的单例
 	private static final class Versions {
 		private static final Instant DEFAULT_TIME_INSTANT = Instant.EPOCH;
 		private static final String DEFAULT_TIME_STRING = "1970-01-01T00:00:00+0000";
@@ -176,6 +177,8 @@ public class EnvironmentInformation {
 		}
 	}
 
+	//占位符模式：线程安全的延迟初始化。见《并发编程实战》p286
+	// 对比双检锁模式
 	private static final class VersionsHolder {
 		static final Versions INSTANCE = new Versions();
 	}

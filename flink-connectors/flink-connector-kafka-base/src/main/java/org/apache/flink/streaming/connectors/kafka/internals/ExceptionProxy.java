@@ -71,10 +71,12 @@ import java.util.concurrent.atomic.AtomicReference;
 @Internal
 public class ExceptionProxy {
 
-	/** The thread that should be interrupted when an exception occurs. */
+	// The thread that should be interrupted when an exception occurs.
+	// 当异常发生时、应该中断的线程
 	private final Thread toInterrupt;
 
-	/** The exception to throw. */
+	// The exception to throw.
+	// 抛出异常的原子引用
 	private final AtomicReference<Throwable> exception;
 
 	/**
@@ -83,6 +85,7 @@ public class ExceptionProxy {
 	 *
 	 * @param toInterrupt The thread to interrupt upon an exception. May be null.
 	 */
+	//
 	public ExceptionProxy(@Nullable Thread toInterrupt) {
 		this.toInterrupt = toInterrupt;
 		this.exception = new AtomicReference<>();
@@ -91,16 +94,18 @@ public class ExceptionProxy {
 	// ------------------------------------------------------------------------
 
 	/**
-	 * Sets the exception and interrupts the target thread,
-	 * if no other exception has occurred so far.
+	 * 如果是首次发生异常：设置异常信息、并中断目标线程。fixme：不是加锁、而是使用CAS处理"首次调用"，学习一下
 	 *
-	 * <p>The exception is only set (and the interruption is only triggered),
-	 * if no other exception was set before.
+	 * Sets the exception and interrupts the target thread, if no other exception has occurred so far.
 	 *
-	 * @param t The exception that occurred
+	 * <p>The exception is only set (and the interruption is only triggered), if no other exception was set before.
+	 * fixme: 只在没有发生异常的情况下、才会成功的设置异常信息和中断没有中断的线程
+	 *
+	 * @param t The exception that occurred 发生的异常
 	 */
 	public void reportError(Throwable t) {
 		// set the exception, if it is the first (and the exception is non null)
+		// Note:如果compareAndSet失败则表示已经有其他线程调用该方法、并中断线程
 		if (t != null && exception.compareAndSet(null, t) && toInterrupt != null) {
 			toInterrupt.interrupt();
 		}

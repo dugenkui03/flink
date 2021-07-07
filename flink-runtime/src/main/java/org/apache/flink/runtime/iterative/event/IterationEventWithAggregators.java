@@ -40,6 +40,7 @@ public abstract class IterationEventWithAggregators extends TaskEvent {
 	protected static final String[] NO_STRINGS = new String[0];
 	protected static final Value[] NO_VALUES = new Value[0];
 
+	// Aggregator 聚合器
 	private String[] aggNames;
 
 	private String[] classNames;
